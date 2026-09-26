@@ -1,128 +1,83 @@
-# Báo Cáo Cá Nhân — Lab 7: Embedding & Vector Store
+# Báo cáo cá nhân — Lab 7: Embedding & Vector Store (K4-L3A)
 
-**Họ tên:** [Tên sinh viên]
-**Nhóm:** [Tên nhóm]
-**Ngày:** [Ngày nộp]
+**Họ tên:** [điền tên]
+**Nhóm:** [điền nhóm]
+**Ngày:** 2026-09-26
 
-> **Nộp 1 bản / sinh viên.** Phần nhóm (lựa chọn tài liệu, thiết kế chiến lược, bộ câu hỏi đánh giá, demo) nộp chung 1 bản trong `REPORT_NHOM.md`. Chi tiết thang điểm: `docs/SCORING.md`.
+> Nội dung giải thích bên dưới được đối chiếu với mã trong `src/`. Các phần cần kết quả thực nghiệm (pytest, embedding similarity và 5 lần chạy retrieval) được để rõ là chưa chạy; không thay bằng số liệu giả.
 
-**Tổng điểm phần cá nhân: 60** = Khởi động (5) + Hướng tiếp cận (10) + Hoàn thiện code (30) + Dự đoán độ tương tự (5) + Kết quả truy xuất của tôi (10).
+## 1. Khởi động
 
----
+### Cosine similarity
 
-## 1. Khởi động (Warm-up) — Cá nhân (5 điểm)
+Cosine similarity cao nghĩa là hai vector embedding hướng gần nhau, thường biểu thị hai văn bản có nội dung hoặc ý định gần nhau dù cách dùng từ có thể khác. Ví dụ gần nhau: “Sinh viên đăng ký môn học trên cổng học vụ” và “Người học chọn học phần qua hệ thống đăng ký”; xa nhau: “Thư viện cho mượn sách” và “Cây cần ánh sáng để quang hợp”. Cosine thường phù hợp hơn Euclidean cho embedding văn bản vì nó so sánh hướng biểu diễn và ít bị ảnh hưởng bởi độ lớn vector.
 
-### Độ tương tự Cosine (Cosine Similarity) (Bài tập 1.1)
+### Tính số chunk
 
-**Độ tương tự cosine cao (High cosine similarity) nghĩa là gì?**
-> *Viết 1-2 câu:*
+Với `chunk_size=500`, `overlap=50`, bước trượt là `500 − 50 = 450`. Theo công thức bài tập: `ceil((10,000 − 50) / 450) = ceil(22.11) = 23 chunks`.
 
-**Ví dụ có độ tương tự CAO:**
-- Câu A:
-- Câu B:
-- Tại sao tương đồng:
+Nếu overlap tăng lên 100, bước trượt còn 400: `ceil((10,000 − 100) / 400) = ceil(24.75) = 25 chunks`. Overlap lớn hơn giúp giữ lại ngữ cảnh ở ranh giới chunk, nhưng tạo thêm chunk trùng lặp và tăng chi phí lưu trữ/tìm kiếm.
 
-**Ví dụ có độ tương tự THẤP:**
-- Câu A:
-- Câu B:
-- Tại sao khác:
+## 2. Hướng tiếp cận của tôi
 
-**Tại sao độ tương tự cosine (cosine similarity) được ưu tiên hơn khoảng cách Euclid (Euclidean distance) cho text embeddings?**
-> *Viết 1-2 câu:*
+### `SentenceChunker.chunk`
 
-### Bài toán tính toán Chunking (Bài tập 1.2)
+Hàm bỏ qua input rỗng hoặc chỉ có khoảng trắng. Regex `(?<=[.!?])(?:\s+|\n+)` tách sau dấu kết câu, giữ dấu câu ở câu trước; sau đó gom tối đa `max_sentences_per_chunk` câu và nối bằng khoảng trắng. Cách này gọn cho văn bản có dấu chấm than/hỏi/chấm, nhưng có thể tách nhầm chữ viết tắt hoặc số thập phân.
 
-**Tài liệu 10,000 ký tự, chunk_size=500, overlap=50. Bao nhiêu chunks?**
-> *Trình bày phép tính:*
-> *Đáp án:*
+### `RecursiveChunker.chunk` / `_split`
 
-**Nếu độ chồng chéo (overlap) tăng lên 100, số lượng chunk thay đổi thế nào? Tại sao muốn độ chồng chéo nhiều hơn?**
-> *Viết 1-2 câu:*
+Hàm thử lần lượt các separator mặc định `\n\n`, `\n`, `. `, khoảng trắng và cuối cùng là tách ký tự. Đoạn dài được chia đệ quy theo separator còn lại rồi các đơn vị kề nhau được đóng gói lại nếu vẫn nằm trong `chunk_size`. Base case là đoạn rỗng (trả danh sách rỗng) hoặc đoạn không dài hơn giới hạn (trả nguyên đoạn); fallback theo ký tự xử lý trường hợp không tìm được separator phù hợp.
 
----
+### `EmbeddingStore`: thêm và tìm kiếm
 
-## 2. Hướng tiếp cận của tôi (My Approach) — Cá nhân (10 điểm)
+`add_documents` tạo embedding cho từng nội dung và lưu record gồm ID, nội dung, metadata và vector. Store thử khởi tạo ChromaDB; nếu không sẵn có thì lưu trong list trong bộ nhớ. Tìm kiếm nhúng câu hỏi, xếp hạng các vector theo dot product giảm dần và trả về top-k; backend Chroma dùng khoảng cách trả về để tạo score `1 - distance`.
 
-Giải thích cách tiếp cận của bạn khi lập trình (implement) các phần chính trong gói `src`.
+### Lọc metadata và xóa
 
-### Các hàm chia nhỏ (Chunking Functions)
+`search_with_filter` lọc metadata trước khi tìm kiếm: Chroma nhận `where`, còn bộ nhớ duyệt record và chỉ giữ record khớp mọi cặp key/value. `delete_document` tìm/xóa các chunk mang `doc_id`; backend list thay list bằng các record còn lại và trả về `True` nếu có record bị xóa.
 
-**`SentenceChunker.chunk`** — hướng tiếp cận:
-> *Viết 2-3 câu: dùng biểu thức chính quy (regex) gì để phát hiện câu? Xử lý trường hợp ngoại lệ (edge case) nào?*
+### `KnowledgeBaseAgent.answer`
 
-**`RecursiveChunker.chunk` / `_split`** — hướng tiếp cận:
-> *Viết 2-3 câu: thuật toán hoạt động thế nào? Base case (trường hợp cơ sở) là gì?*
+Agent lấy top-k kết quả, ghép nội dung thành context và thêm nhãn nguồn lấy từ metadata `source` hoặc `doc_id`. Prompt yêu cầu chỉ trả lời theo context và nói rõ khi context không có đáp án; prompt được chuyển cho `llm_fn`. Bản cài hiện chưa đưa metadata filter vào `answer`.
 
-### Lớp EmbeddingStore
+## 3. Hoàn thiện code — kết quả kiểm thử
 
-**`add_documents` + `search`** — hướng tiếp cận:
-> *Viết 2-3 câu: lưu trữ thế nào? Tính độ tương tự ra sao?*
+Không chạy `pytest` trong lượt hoàn thiện báo cáo này, nên chưa có output hoặc số test pass để ghi. Hãy chạy `pytest tests/ -v` trong môi trường Python của lab và dán kết quả tại đây.
 
-**`search_with_filter` + `delete_document`** — hướng tiếp cận:
-> *Viết 2-3 câu: lọc (filter) trước hay sau? Xóa bằng cách nào?*
-
-### Tác tử KnowledgeBaseAgent
-
-**`answer`** — hướng tiếp cận:
-> *Viết 2-3 câu: cấu trúc prompt? Cách đưa ngữ cảnh (inject context) vào thế nào?*
-
----
-
-## 3. Hoàn thiện code (Core Implementation) — Cá nhân (30 điểm)
-
-Vượt qua bộ kiểm thử là điều kiện tính điểm phần này.
-
-### Kết Quả Kiểm Thử (Test Results)
-
-```
-# Dán kết quả (output) của: pytest tests/ -v
+```text
+Kết quả: chưa chạy trong lượt này
+Số test pass: chưa xác định / 42
 ```
 
-**Số lượng bài test vượt qua (pass):** __ / 42
+## 4. Dự đoán độ tương tự
 
----
-
-## 4. Dự đoán độ tương tự (Similarity Predictions) — Cá nhân (5 điểm)
+Các cặp dưới đây là dự đoán ngữ nghĩa trước khi chạy embedding; cột điểm thực tế cần điền bằng backend đã chọn. Backend mặc định `MockEmbedder` là vector giả xác định, không phản ánh tương đồng ngôn ngữ, nên để đánh giá tiếng Việt cần dùng local multilingual hoặc một embedder thật.
 
 | Cặp | Câu A | Câu B | Dự đoán | Điểm thực tế | Đúng? |
-|------|-----------|-----------|---------|--------------|-------|
-| 1 | | | cao / thấp | | |
-| 2 | | | cao / thấp | | |
-| 3 | | | cao / thấp | | |
-| 4 | | | cao / thấp | | |
-| 5 | | | cao / thấp | | |
+|---|---|---|---|---:|---|
+| 1 | Sinh viên đăng ký học phần trên cổng học vụ. | Người học chọn môn qua hệ thống đăng ký. | Cao | Chưa chạy | — |
+| 2 | Cần kiểm tra môn tiên quyết trước khi xác nhận đăng ký. | Thư viện cung cấp không gian học tập. | Thấp | Chưa chạy | — |
+| 3 | Mang thẻ định danh hợp lệ để mượn tài liệu. | Người dùng cần thẻ thư viện khi mượn sách. | Cao | Chưa chạy | — |
+| 4 | Lỗi trùng lịch cần xử lý trước hạn điều chỉnh. | Yêu cầu ngoại lệ gửi qua kênh hỗ trợ học vụ. | Trung bình/cao | Chưa chạy | — |
+| 5 | Học phí được thanh toán theo học kỳ. | Chim di cư về phương nam vào mùa đông. | Thấp | Chưa chạy | — |
 
-**Kết quả nào bất ngờ nhất? Điều này nói gì về cách embeddings biểu diễn ý nghĩa?**
-> *Viết 2-3 câu:*
+Chưa thể nêu kết quả bất ngờ khi chưa có điểm similarity thực tế. Khi có điểm, so sánh thứ hạng dự đoán với thứ hạng đo được; nếu dùng mock backend thì sai khác chủ yếu phản ánh giới hạn của mock chứ không phải chất lượng biểu diễn ngữ nghĩa.
 
----
+## 5. Kết quả truy xuất cá nhân
 
-## 5. Kết quả truy xuất của tôi (Competition Results) — Cá nhân (10 điểm)
+Dùng cùng 5 câu hỏi trong báo cáo nhóm. Corpus hiện tại còn là dữ liệu mẫu, do đó kết quả dưới đây cần bổ sung sau khi chạy agent trên tài liệu chính thức.
 
-Chạy **5 câu hỏi đánh giá của nhóm** trên mã nguồn cá nhân của bạn trong gói `src`. **5 câu hỏi này phải trùng với các thành viên cùng nhóm** (xem `REPORT_NHOM.md`).
+| # | Câu hỏi | Top-1 chunk (tóm tắt) | Score | Liên quan? | Trả lời agent |
+|---|---|---|---:|---|---|
+| 1 | Sinh viên đăng ký học phần ở đâu và theo lịch nào? | Chưa chạy | — | — | — |
+| 2 | Cần kiểm tra gì trước khi xác nhận đăng ký học phần? | Chưa chạy | — | — | — |
+| 3 | Xử lý lỗi trùng lịch và yêu cầu ngoại lệ thế nào? | Chưa chạy | — | — | — |
+| 4 | Cần mang gì để mượn tài liệu? | Chưa chạy | — | — | — |
+| 5 | Chỉ tìm tài liệu có `audience=student`: sinh viên đăng ký học phần ở đâu? | Chưa chạy; chunk nguồn là `course-registration.md` | — | — | — |
 
-| # | Câu hỏi (Query) | Top-1 Chunk truy xuất được (tóm tắt) | Điểm Score | Có liên quan không? (Relevant) | Câu trả lời của Agent (tóm tắt) |
-|---|-------|--------------------------------|-------|-----------|------------------------|
-| 1 | | | | | |
-| 2 | | | | | |
-| 3 | | | | | |
-| 4 | | | | | |
-| 5 | | | | | |
+**Số câu có chunk liên quan trong top-3:** chưa đo / 5.
+**Điều học được qua demo:** [bổ sung sau khi xem demo của nhóm/nhóm khác; nêu một quan sát cụ thể về chunking, metadata hoặc grounding].
 
-**Bao nhiêu câu hỏi trả về chunk có liên quan trong top-3?** __ / 5
+## Tự đánh giá cá nhân
 
-**Điều hay nhất tôi học được từ thành viên khác / nhóm khác (qua demo):**
-> *Viết 2-3 câu:*
-
----
-
-## Tự Đánh Giá (Phần Cá Nhân)
-
-| Tiêu chí | Điểm tự đánh giá |
-|----------|-------------------|
-| Khởi động (Warm-up) | / 5 |
-| Hướng tiếp cận của tôi (My Approach) | / 10 |
-| Hoàn thiện code (Core Implementation — tests) | / 30 |
-| Dự đoán độ tương tự (Similarity Predictions) | / 5 |
-| Kết quả truy xuất của tôi (Competition Results) | / 10 |
-| **Tổng phần cá nhân** | **/ 60** |
+Chưa tự chấm điểm vì các phần thực nghiệm và thông tin cá nhân còn cần hoàn tất.

@@ -1,146 +1,103 @@
-# Báo Cáo Nhóm — Lab 7: Embedding & Vector Store
+# Báo cáo nhóm — Lab 7: Embedding & Vector Store (K4-L3A)
 
-**Nhóm:** [Tên nhóm]
-**Thành viên:** [Họ tên từng thành viên]
-**Ngày:** [Ngày nộp]
+**Nhóm:** [bổ sung tên nhóm]
+**Thành viên:** [bổ sung họ tên]
+**Ngày:** 2026-09-26
 
-> **Nộp 1 bản / nhóm.** Phần cá nhân (hướng tiếp cận, kết quả riêng, dự đoán…) mỗi thành viên nộp riêng trong `REPORT_CANHAN.md`. Chi tiết thang điểm: `docs/SCORING.md`.
+> Bản nháp này được điền từ nội dung đang có trong repository. Hai tài liệu trong `data/university/` tự ghi là dữ liệu khởi động/template và dùng URL `example.edu`; cần thay bằng nguồn chính thức trước khi xem kết quả là benchmark thực tế. Repository hiện có 2 tài liệu đại học, chưa đạt yêu cầu 5–10 tài liệu.
 
-**Tổng điểm phần nhóm: 40** = Lựa chọn tài liệu (10) + Thiết kế chiến lược (15) + Chất lượng truy xuất (10) + Thuyết trình (5).
+## 1. Lựa chọn tài liệu
 
----
+### Chủ đề và lý do
 
-## 1. Lựa chọn tài liệu (Document Set Quality) — Nhóm (10 điểm)
+**Chủ đề:** Dịch vụ và thủ tục học vụ đại học: đăng ký học phần và dịch vụ thư viện.
+Chủ đề phù hợp với K4-L3A và tạo được câu hỏi truy xuất có câu trả lời kiểm chứng trực tiếp trong tài liệu. Tập hiện tại còn quá nhỏ và nội dung thư viện có ghi rõ cần bổ sung quy định chính thức về thời hạn mượn, gia hạn và quá hạn.
 
-### Chủ đề (Domain) & Lý Do Chọn
+### Kiểm kê dữ liệu hiện có
 
-**Chủ đề:** [ví dụ: Customer support FAQ, Luật Việt Nam, công thức nấu ăn, ...]
+| # | Tài liệu | Nguồn trong metadata | Ngày / phiên bản | Số ký tự tệp | Metadata |
+|---|---|---|---|---:|---|
+| 1 | `course-registration.md` — Đăng ký học phần | `https://example.edu/hoc-vu/dang-ky-hoc-phan` (URL mẫu, chưa xác minh) | 2026-08-02 / 2026.1 (mẫu) | 939 | `audience=student`, `department=academic-affairs`, `language=vi`, `doc_id` |
+| 2 | `library-services.md` — Dịch vụ thư viện | `https://example.edu/thu-vien/dich-vu` (URL mẫu, chưa xác minh) | 2026-08-02 / 2026.1 (mẫu) | 754 | `audience=all`, `department=library`, `language=vi`, `doc_id` |
 
-**Tại sao nhóm chọn chủ đề này?**
-> *Viết 2-3 câu:*
+**Quản trị dữ liệu:** Chưa thể đánh dấu đạt. Cả hai nguồn đều là URL mẫu, corpus chưa đủ 5–10 tài liệu. Trước khi nộp, thay URL/ngày/phiên bản bằng thông tin nguồn công khai thật, bổ sung tối thiểu 3 tài liệu và xác nhận quyền sử dụng.
 
-### Danh sách tài liệu (Data Inventory)
+### Metadata đề xuất
 
-| # | Tên tài liệu | Nguồn (Source URL) | Ngày lấy / Phiên bản | Số ký tự | Metadata đã gán |
-|---|--------------|------------|--------------------|----------|-----------------|
-| 1 | | | | | |
-| 2 | | | | | |
-| 3 | | | | | |
-| 4 | | | | | |
-| 5 | | | | | |
+| Trường | Kiểu / ví dụ | Giá trị cho truy xuất |
+|---|---|---|
+| `audience` | enum: `student`, `faculty`, `staff`, `all` | Lọc đúng nhóm người dùng; benchmark có câu lọc `student` |
+| `department` | chuỗi: `library`, `academic-affairs` | Thu hẹp theo đơn vị phụ trách |
+| `category` | chuỗi: `registration`, `borrowing` | Phân loại nghiệp vụ khi hỏi theo chủ đề |
+| `language` | chuỗi: `vi` | Lọc ngôn ngữ corpus |
+| `source_url` | URL | Truy vết nguồn và kiểm chứng câu trả lời |
+| `retrieved_at` | ngày ISO | Đánh giá độ mới |
+| `document_version` | chuỗi/ngày hiệu lực | Phân biệt phiên bản chính sách |
 
-**Danh sách kiểm tra quản trị dữ liệu (Data governance checklist):**
-- [ ] Tập tài liệu (Corpus) chỉ chứa nguồn công khai/được phép dùng và không chứa dữ liệu cá nhân, thông tin đăng nhập hoặc tài liệu nội bộ.
-- [ ] Mỗi tài liệu có `source_url`, `retrieved_at`, `document_version` (hoặc ngày hiệu lực) trong metadata.
+## 2. Thiết kế chiến lược
 
-### Cấu trúc Metadata (Metadata Schema)
+### Baseline
 
-| Trường metadata | Kiểu | Ví dụ giá trị | Tại sao hữu ích cho truy xuất (retrieval)? |
-|----------------|------|---------------|-------------------------------|
-| | | | |
-| | | | |
+Chưa có kết quả chạy `ChunkingStrategyComparator().compare()` được lưu trong repository. Hãy chạy trên 2–3 tài liệu đã xác minh và điền các số liệu bên dưới; không nên suy ra điểm truy xuất từ số chunk.
 
----
+| Tài liệu | Chiến lược | Số chunk | Độ dài TB | Nhận xét ngữ cảnh |
+|---|---|---:|---:|---|
+| [điền] | FixedSizeChunker (`fixed_size`) | — | — | — |
+| [điền] | SentenceChunker (`by_sentences`) | — | — | — |
+| [điền] | RecursiveChunker (`recursive`) | — | — | — |
 
-## 2. Thiết kế chiến lược (Strategy Design) — Nhóm (15 điểm)
+### Chiến lược từng thành viên
 
-> Mỗi thành viên thử **một chiến lược khác nhau** trên cùng bộ tài liệu; nhóm tổng hợp và so sánh ở đây.
+**Thành viên 1 — [tên]**: [chiến lược, tham số, lý do phù hợp; nếu custom, dán mã nguồn].
+**Thành viên 2 — [tên]**: [chiến lược, tham số, lý do phù hợp; nếu custom, dán mã nguồn].
+**Thành viên 3 — [tên]**: [chiến lược, tham số, lý do phù hợp; nếu custom, dán mã nguồn].
 
-### Phân tích đường cơ sở (Baseline Analysis)
+### So sánh trong nhóm
 
-Chạy `ChunkingStrategyComparator().compare()` trên 2-3 tài liệu:
+| Thành viên | Chiến lược | Điểm truy xuất /10 | Điểm mạnh | Điểm yếu |
+|---|---|---:|---|---|
+| [tên] | [điền] | — | — | — |
+| [tên] | [điền] | — | — | — |
+| [tên] | [điền] | — | — | — |
 
-| Tài liệu | Chiến lược (Strategy) | Số lượng Chunk | Độ dài trung bình | Giữ được ngữ cảnh không? |
-|-----------|----------|-------------|------------|-------------------|
-| | FixedSizeChunker (`fixed_size`) | | | |
-| | SentenceChunker (`by_sentences`) | | | |
-| | RecursiveChunker (`recursive`) | | | |
+Chưa thể kết luận chiến lược tốt nhất khi chưa có kết quả chạy chung. Với corpus ngắn có cấu trúc tiêu đề/đoạn như hiện tại, recursive chunking có khả năng giữ ranh giới mục tốt; cần xác nhận bằng top-3 retrieval trên các câu hỏi chung.
 
-### Chiến lược của từng thành viên
+## 3. Benchmark câu hỏi và chất lượng truy xuất
 
-> Mỗi thành viên điền một khối dưới đây (copy thêm nếu nhóm có nhiều hơn 3 người).
+Các câu trả lời dưới đây chỉ dựa trên câu chữ có trong corpus khởi động hiện tại. Chúng không phải quy định chính thức của một trường.
 
-**Thành viên 1 — [Tên]**
-- **Loại chiến lược:** [FixedSize / Sentence / Recursive / custom]
-- **Mô tả & lý do chọn cho chủ đề này:** *(2-3 câu)*
-- **Code snippet (nếu custom):**
-```python
-# Dán mã nguồn (implementation) vào đây
-```
+| # | Câu hỏi | Câu trả lời chuẩn | Tài liệu/đoạn liên quan |
+|---|---|---|---|
+| 1 | Sinh viên đăng ký học phần ở đâu và theo lịch nào? | Trên cổng học vụ, theo lịch của từng học kỳ. | `course-registration.md`, đoạn 1 |
+| 2 | Sinh viên cần kiểm tra gì trước khi xác nhận đăng ký học phần? | Kiểm tra học phần tiên quyết nếu học phần đó yêu cầu. | `course-registration.md`, đoạn 1 |
+| 3 | Sinh viên xử lý lỗi trùng lịch và yêu cầu ngoại lệ như thế nào? | Điều chỉnh lớp trước hạn điều chỉnh được công bố; yêu cầu ngoại lệ gửi qua kênh hỗ trợ học vụ chính thức. | `course-registration.md`, đoạn 2 |
+| 4 | Cần mang gì để sử dụng dịch vụ mượn tài liệu? | Thẻ định danh hợp lệ. | `library-services.md`, đoạn 1 |
+| 5 | Chỉ tìm tài liệu có `audience=student`: sinh viên đăng ký học phần ở đâu? | Sinh viên đăng ký học phần trên cổng học vụ. | `course-registration.md`, đoạn 1; front matter `audience=student` |
 
-**Thành viên 2 — [Tên]**
-- **Loại chiến lược:**
-- **Mô tả & lý do chọn:**
-- **Code snippet (nếu custom):**
+> Câu 5 là câu cần filter metadata; trong corpus hiện tại chỉ tài liệu đăng ký học phần có `audience=student`.
 
-**Thành viên 3 — [Tên]**
-- **Loại chiến lược:**
-- **Mô tả & lý do chọn:**
-- **Code snippet (nếu custom):**
+### Kết quả chạy retrieval
 
-### So Sánh Giữa Các Thành Viên
+Chưa có log chạy 5 câu hỏi bằng các chiến lược của thành viên. Điền sau khi chạy: chiến lược tốt nhất theo từng câu, top-3 có chứa chunk liên quan hay không, và câu trả lời agent. Không tự chấm điểm khi chưa có log.
 
-| Thành viên | Chiến lược (Strategy) | Điểm truy xuất (/10) | Điểm mạnh | Điểm yếu |
-|-----------|----------|----------------------|-----------|----------|
-| | | | | |
-| | | | | |
-| | | | | |
+| # | Chiến lược tốt nhất | Chunk liên quan trong top-3? | Ghi chú / câu trả lời agent |
+|---|---|---|---|
+| 1 | — | Chưa chạy | — |
+| 2 | — | Chưa chạy | — |
+| 3 | — | Chưa chạy | — |
+| 4 | — | Chưa chạy | — |
+| 5 | — | Chưa chạy | — |
 
-**Chiến lược nào tốt nhất cho chủ đề này? Tại sao?**
-> *Viết 2-3 câu — đây là phần được đánh giá cao nhất (khả năng suy nghĩ & giải thích):*
+**Metadata:** Filter có thể loại bỏ tài liệu sai đối tượng trước khi xếp hạng. Tuy nhiên corpus hiện có một tài liệu `student` và một tài liệu `all`, nên cần thêm tài liệu và kiểm tra câu hỏi cùng filter trước khi kết luận filter cải thiện kết quả.
 
----
+## 4. Demo và bài học nhóm
 
-## 3. Câu hỏi đánh giá & Chất lượng truy xuất (Retrieval Quality) — Nhóm (10 điểm)
+- So sánh ba ranh giới chunk: kích thước ký tự, nhóm câu, và phân tách đệ quy theo đoạn/câu/từ.
+- Demo câu hỏi trùng lịch và câu hỏi cần lọc theo audience; chỉ trình diễn trên nguồn chính thức sau khi thay dữ liệu mẫu.
+- Hiện chưa có kết quả nhóm để báo cáo bài học thực nghiệm. Dự kiến cần đối chiếu tính mạch lạc của chunk, khả năng tìm đúng đoạn, và độ chính xác của câu trả lời.
 
-### Câu hỏi đánh giá & Câu trả lời chuẩn (nhóm thống nhất)
+**Nếu làm lại:** Mở rộng corpus lên 5–10 trang chính thức, chuẩn hóa front matter metadata, tạo câu hỏi có đáp án cụ thể từ từng nguồn, rồi chạy cùng benchmark và lưu top-3 cho mỗi chiến lược.
 
-> **Đúng 5 câu hỏi**, đa dạng, có thể kiểm chứng; **ít nhất 1 câu** cần lọc metadata mới trả lời tốt. Đây là bộ câu hỏi chung cho mọi thành viên chạy.
+## Tự đánh giá nhóm
 
-| # | Câu hỏi (Query) | Câu trả lời chuẩn (Gold Answer) | Chunk nào chứa thông tin? |
-|---|-------|-------------------------------|--------------------------|
-| 1 | | | |
-| 2 | | | |
-| 3 | | | |
-| 4 | | | |
-| 5 | | | |
-
-### Tổng hợp chất lượng truy xuất của nhóm
-
-> Cách chấm (theo `docs/SCORING.md`): **2 điểm/câu** — top-3 chứa chunk liên quan + agent trả lời đúng (2), có liên quan nhưng thiếu/không ở top-1 (1), không có trong top-3 (0).
-
-| # | Câu hỏi | Chiến lược tốt nhất cho câu này | Có chunk liên quan trong top-3? | Ghi chú |
-|---|---------|-------------------------------|-------------------------------|---------|
-| 1 | | | | |
-| 2 | | | | |
-| 3 | | | | |
-| 4 | | | | |
-| 5 | | | | |
-
-**Lọc bằng metadata có giúp ích không? Ở câu hỏi nào?**
-> *Viết 2-3 câu:*
-
----
-
-## 4. Thuyết trình (Demo) & Bài học nhóm — Nhóm (5 điểm)
-
-**Những phân tích (insights) hay nhất nhóm sẽ trình bày:**
-> *Liệt kê 2-3 ý:*
-
-**Bài học rút ra khi so sánh trong nhóm:**
-> *Viết 2-3 câu — cùng tài liệu nhưng chiến lược khác nhau dẫn tới khác biệt gì?*
-
-**Nếu làm lại, nhóm sẽ thay đổi gì trong chiến lược dữ liệu (data strategy)?**
-> *Viết 2-3 câu:*
-
----
-
-## Tự Đánh Giá (Phần Nhóm)
-
-| Tiêu chí | Điểm tự đánh giá |
-|----------|-------------------|
-| Lựa chọn tài liệu (Document Set Quality) | / 10 |
-| Thiết kế chiến lược (Strategy Design) | / 15 |
-| Chất lượng truy xuất (Retrieval Quality) | / 10 |
-| Thuyết trình (Demo) | / 5 |
-| **Tổng phần nhóm** | **/ 40** |
+Chưa chấm điểm: cần hoàn thành corpus, thí nghiệm retrieval và demo trước khi tự đánh giá các hạng mục.
